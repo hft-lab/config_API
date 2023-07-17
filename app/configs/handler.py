@@ -7,6 +7,7 @@ from marshmallow import ValidationError
 from app.configs.quires import get_last_launch, insert
 from app.configs.serialization import CreateConfigsSchema
 from config import Config
+from core.auth.token import UserToken
 from core.bases.handler import BaseHandler
 
 
@@ -22,16 +23,16 @@ class CreateConfigsHandler(BaseHandler):
         payload['ts'] = int(time.time() * 1000)
         payload['id'] = uuid.uuid4()
         payload['datetime'] = datetime.utcnow()
-        payload['api_secret_encrypted'] = self.request.headers.get('token', None)
+        payload['api_secret_encrypted'] = UserToken.encode_values(self.request.headers.get('token', ''))
         payload['bots_quantity'] = len(self.launchers)
 
         return payload
 
-    async def __prepare_data(self, conn, exchange_1, exchange_2, coin, payload) -> None:
+    async def __prepare_data(self, conn, exchange_1: str, exchange_2: str, coin: str, payload: dict) -> None:
         data = {
-            'exchange_1': exchange_1,
-            'exchange_2': exchange_2,
-            'coin': coin,
+            'exchange_1': exchange_1.upper(),
+            'exchange_2': exchange_2.upper(),
+            'coin': coin.upper(),
             'id': uuid.uuid4(),
             'ts': int(time.time() * 1000),
             'datetime': datetime.utcnow(),
@@ -43,7 +44,7 @@ class CreateConfigsHandler(BaseHandler):
         data.update({k: v for k, v in payload.items() if k not in data and k not in no_need_update})
 
         if last_launch_data := await get_last_launch(conn, exchange_1, exchange_2, coin):
-            no_need_update = ['fee_exchange_1', 'fee_exchange_2', 'shift']
+            no_need_update = ['fee_exchange_1', 'fee_exchange_2', 'shift', 'env']
             last_launch_data = dict(last_launch_data)
             data.update({k: v for k, v in last_launch_data.items() if k not in data and k not in no_need_update and v is not None})
 
