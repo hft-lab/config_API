@@ -118,15 +118,16 @@ class CreateConfigsHandler(BaseHandler):
 
     async def __prepare_exchange_exchange(self, conn, payload: dict) -> None:
         is_break = False
-        for coin in Config.COINS:
-            if payload['coin'] != 'ALL':
-                coin = payload['coin']
-                is_break = True
+        if payload['exchange_1'] != payload['exchange_2']:
+            for coin in Config.COINS:
+                if payload['coin'] != 'ALL':
+                    coin = payload['coin']
+                    is_break = True
 
-            await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], coin, payload)
+                await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], coin, payload)
 
-            if is_break:
-                break
+                if is_break:
+                    break
 
     async def __prepare_launchers(self, conn, payload: dict) -> None:
         if payload['exchange_1'].upper() == 'ALL' and payload['exchange_2'].upper() == 'ALL':
