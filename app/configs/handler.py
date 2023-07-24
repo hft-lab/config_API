@@ -16,8 +16,7 @@ class CreateConfigsHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.launchers = []
-        self.must_be_any_field = ['bots_quantity', 'target_profit',
-                                  'shift_use_flag', 'orders_delay', 'max_order_usd',
+        self.must_be_any_field = ['bots_quantity', 'target_profit', 'shift_use_flag', 'orders_delay', 'max_order_usd',
                                   'max_leverage', 'pause_flag']
 
     def __prepare_payload(self, payload: dict) -> dict:
@@ -41,13 +40,14 @@ class CreateConfigsHandler(BaseHandler):
             'bot_config_id': payload['id'],
 
         }
-        no_need_update = ['context', 'api_secret_encrypted', 'bots_quantity', 'orders_delay']
+        no_need_update = ['context', 'api_secret_encrypted', 'bots_quantity']
         data.update({k: v for k, v in payload.items() if k not in data and k not in no_need_update})
 
         if last_launch_data := await get_last_launch(conn, exchange_1, exchange_2, coin):
             no_need_update = ['fee_exchange_1', 'fee_exchange_2', 'shift', 'env']
             last_launch_data = dict(last_launch_data)
-            data.update({k: v for k, v in last_launch_data.items() if k not in data and k not in no_need_update and v is not None})
+            data.update({k: v for k, v in last_launch_data.items() if
+                         k not in data and k not in no_need_update and v is not None})
 
         self.launchers.append(data)
 
@@ -121,10 +121,12 @@ class CreateConfigsHandler(BaseHandler):
         if payload['exchange_1'] != payload['exchange_2']:
             for coin in Config.COINS:
                 if payload['coin'] != 'ALL':
-                    await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], payload['coin'], payload)
+                    await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], payload['coin'],
+                                              payload)
                     break
                 else:
                     await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], coin, payload)
+
     async def __prepare_launchers(self, conn, payload: dict) -> None:
         payload['exchange_1'] = payload['exchange_1'].upper()
         payload['exchange_2'] = payload['exchange_2'].upper()
@@ -143,11 +145,11 @@ class CreateConfigsHandler(BaseHandler):
     async def handle(self):
         payload = self.__prepare_payload(self.parse(schema=CreateConfigsSchema, data=await self.request.json()))
 
-        if payload['exchange_1'].upper() == payload['exchange_2'].upper():
+        if payload['exchange_1'].upper() == payload['exchange_2'].upper() and payload['exchange_1'] != 'ALL':
             raise ValidationError(message='Fields exchange_1 == exchange_2, '
                                           'this fields must be different')
 
-        elif any([payload.get(k, False) for k in self.must_be_any_field]):
+        elif any([str(x) if x == 0 else x for x in [payload.get(k, False) for k in self.must_be_any_field]]):
             async with self.db_engine.acquire() as conn:
                 try:
                     await  self.__prepare_launchers(conn, payload)
@@ -155,7 +157,6 @@ class CreateConfigsHandler(BaseHandler):
                     payload['bots_quantity'] = len(self.launchers)
 
                     for data in self.launchers:
-                        print(data)
                         await insert(conn, 'bot_launches', data)
 
                     await insert(conn, 'bot_config', payload)
