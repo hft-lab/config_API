@@ -25,6 +25,9 @@ class CreateConfigsHandler(BaseHandler):
         payload['datetime'] = datetime.utcnow()
         payload['api_secret_encrypted'] = UserToken.encode_values(self.request.headers.get('token', ''))
         payload['context'] = self.request.headers.get('context', 'manual')
+        payload['exchange_1'] = payload['exchange_1'].upper()
+        payload['exchange_2'] = payload['exchange_2'].upper()
+        payload['coin'] = payload['coin'].upper()
 
         return payload
 
@@ -58,19 +61,17 @@ class CreateConfigsHandler(BaseHandler):
             for exchange_2 in Config.EXCHANGES:
                 for coin in Config.COINS:
                     if exchange_1 != exchange_2:
+                        if payload['coin'] != 'ALL':
+                            coin = payload['coin']
                         config, config_r = [exchange_1, exchange_2, coin], [exchange_2, exchange_1, coin]
 
                         if config not in already and config_r not in already:
                             already.append(config)
                             already.append(config_r)
 
+                            await self.__prepare_data(conn, exchange_1, exchange_2, payload['coin'], payload)
+
                             if payload['coin'] != 'ALL':
-                                coin = payload['coin']
-                                is_break = True
-
-                            await self.__prepare_data(conn, exchange_1, exchange_2, coin, payload)
-
-                            if is_break:
                                 break
 
     async def __prepare_exchange_all(self, conn, payload: dict) -> None:
@@ -145,7 +146,7 @@ class CreateConfigsHandler(BaseHandler):
     async def handle(self):
         payload = self.__prepare_payload(self.parse(schema=CreateConfigsSchema, data=await self.request.json()))
 
-        if payload['exchange_1'].upper() == payload['exchange_2'].upper() and payload['exchange_1'] != 'ALL':
+        if payload['exchange_1'] == payload['exchange_2'] != 'ALL':
             raise ValidationError(message='Fields exchange_1 == exchange_2, '
                                           'this fields must be different')
 

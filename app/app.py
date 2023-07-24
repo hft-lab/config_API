@@ -1,4 +1,3 @@
-
 from aiohttp import web
 
 from core.services.postgres import setup_postgres, clean_postgres
