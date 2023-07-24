@@ -42,10 +42,10 @@ async def insert_many_launches(conn, payload):
             values 
                 {values[:-2]}
         """
-    print(sql)
+
     await conn.execute(sql)
 
-async def get_last_launch(conn, exchange_1, exchange_2, coin):
+async def get_last_launch(conn, exchange_1, exchange_2, coin) -> dict:
     sql = f"""
     select 
         *
@@ -60,5 +60,4 @@ async def get_last_launch(conn, exchange_1, exchange_2, coin):
     limit 
     	1
     """
-
     return await conn.fetchrow(sql)

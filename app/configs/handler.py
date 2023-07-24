@@ -1,4 +1,5 @@
 import time
+import traceback
 import uuid
 from datetime import datetime
 
@@ -24,7 +25,7 @@ class CreateConfigsHandler(BaseHandler):
         payload['id'] = uuid.uuid4()
         payload['datetime'] = datetime.utcnow()
         payload['api_secret_encrypted'] = UserToken.encode_values(self.request.headers.get('token', ''))
-        payload['bots_quantity'] = len(self.launchers)
+        payload['context'] = self.request.headers.get('context', 'manual')
 
         return payload
 
@@ -40,7 +41,7 @@ class CreateConfigsHandler(BaseHandler):
             'bot_config_id': payload['id'],
 
         }
-        no_need_update = ['context', 'api_secret_encrypted', 'bots_quantity']
+        no_need_update = ['context', 'api_secret_encrypted', 'bots_quantity', 'orders_delay']
         data.update({k: v for k, v in payload.items() if k not in data and k not in no_need_update})
 
         if last_launch_data := await get_last_launch(conn, exchange_1, exchange_2, coin):
@@ -117,39 +118,49 @@ class CreateConfigsHandler(BaseHandler):
                             break
 
     async def __prepare_exchange_exchange(self, conn, payload: dict) -> None:
-        is_break = False
         if payload['exchange_1'] != payload['exchange_2']:
             for coin in Config.COINS:
                 if payload['coin'] != 'ALL':
-                    coin = payload['coin']
-                    is_break = True
-
-                await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], coin, payload)
-
-                if is_break:
+                    await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], payload['coin'], payload)
                     break
-
+                else:
+                    await self.__prepare_data(conn, payload['exchange_1'], payload['exchange_2'], coin, payload)
     async def __prepare_launchers(self, conn, payload: dict) -> None:
-        if payload['exchange_1'].upper() == 'ALL' and payload['exchange_2'].upper() == 'ALL':
+        payload['exchange_1'] = payload['exchange_1'].upper()
+        payload['exchange_2'] = payload['exchange_2'].upper()
+        payload['coin'] = payload['coin'].upper()
+        payload['context'] = payload['context'].lower()
+
+        if payload['exchange_1'] == 'ALL' and payload['exchange_2'] == 'ALL':
             await self.__prepare_all_all(conn, payload)
-        elif payload['exchange_1'].upper() != 'ALL' and payload['exchange_2'].upper() == 'ALL':
+        elif payload['exchange_1'] != 'ALL' and payload['exchange_2'] == 'ALL':
             await self.__prepare_exchange_all(conn, payload)
-        elif payload['exchange_1'].upper() == 'ALL' and payload['exchange_2'].upper() != 'ALL':
+        elif payload['exchange_1'] == 'ALL' and payload['exchange_2'] != 'ALL':
             await self.__prepare_all_exchange(conn, payload)
-        elif payload['exchange_1'].upper() != 'ALL' and payload['exchange_2'].upper() != 'ALL':
+        elif payload['exchange_1'] != 'ALL' and payload['exchange_2'] != 'ALL':
             await self.__prepare_exchange_exchange(conn, payload)
 
     async def handle(self):
         payload = self.__prepare_payload(self.parse(schema=CreateConfigsSchema, data=await self.request.json()))
 
-        if any([payload.get(k, False) for k in self.must_be_any_field]):
+        if payload['exchange_1'].upper() == payload['exchange_2'].upper():
+            raise ValidationError(message='Fields exchange_1 == exchange_2, '
+                                          'this fields must be different')
+
+        elif any([payload.get(k, False) for k in self.must_be_any_field]):
             async with self.db_engine.acquire() as conn:
-                await  self.__prepare_launchers(conn, payload)
+                try:
+                    await  self.__prepare_launchers(conn, payload)
 
-                for data in self.launchers:
-                    await insert(conn, 'bot_launches', data)
+                    payload['bots_quantity'] = len(self.launchers)
 
-                await insert(conn, 'bot_config', payload)
+                    for data in self.launchers:
+                        print(data)
+                        await insert(conn, 'bot_launches', data)
+
+                    await insert(conn, 'bot_config', payload)
+                except:
+                    traceback.print_exc()
 
             return {'code': 20, 'message': 'Config and launchers created.'}
 
