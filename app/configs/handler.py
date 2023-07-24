@@ -63,13 +63,14 @@ class CreateConfigsHandler(BaseHandler):
                     if exchange_1 != exchange_2:
                         if payload['coin'] != 'ALL':
                             coin = payload['coin']
+
                         config, config_r = [exchange_1, exchange_2, coin], [exchange_2, exchange_1, coin]
 
                         if config not in already and config_r not in already:
                             already.append(config)
                             already.append(config_r)
 
-                            await self.__prepare_data(conn, exchange_1, exchange_2, payload['coin'], payload)
+                            await self.__prepare_data(conn, exchange_1, exchange_2, coin, payload)
 
                             if payload['coin'] != 'ALL':
                                 break
